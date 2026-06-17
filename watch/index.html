@@ -283,6 +283,13 @@
           || /\.m3u8($|\?)/i.test(video);
       }
 
+      function shouldUseNativeHls() {
+        const ua = navigator.userAgent || "";
+        const isAppleWebKit = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox/i.test(ua);
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        return (isAppleWebKit || isIOS) && Boolean(player.canPlayType("application/vnd.apple.mpegurl"));
+      }
+
       const player = document.getElementById("player");
       const download = document.getElementById("download");
       const openDirect = document.getElementById("openDirect");
@@ -367,7 +374,7 @@
         }
 
         if (isHls(extension, mime, video)) {
-          if (player.canPlayType("application/vnd.apple.mpegurl")) {
+          if (shouldUseNativeHls()) {
             player.src = video;
             player.load();
             setState("HLS 原生播放");
