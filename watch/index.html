@@ -246,6 +246,7 @@
         const size = firstValue("s", "size");
         const allowDownload = (firstValue("download") || "1") !== "0";
 
+        const shouldReloadVideo = currentVideo !== video || player.currentSrc !== video;
         currentVideo = video;
         currentName = name;
         fileName.textContent = name;
@@ -266,7 +267,7 @@
         setControlsVisible(true);
         download.classList.toggle("hidden", !allowDownload);
         openDirect.href = video;
-        forceLoadVideo(video);
+        if (shouldReloadVideo) forceLoadVideo(video);
       }
 
       download.addEventListener("click", async () => {
