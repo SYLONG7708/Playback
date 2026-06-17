@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>回放中心觀看頁</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+        background: #090b0c;
+        color: #d7e2dd;
+      }
+      body {
+        min-height: 100svh;
+        margin: 0;
+        padding: 16px;
+        background:
+          linear-gradient(90deg, rgba(79, 209, 197, 0.05) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(168, 212, 93, 0.04) 1px, transparent 1px),
+          #090b0c;
+        background-size: 52px 52px;
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      header,
+      section {
+        border: 1px solid rgba(168, 212, 93, 0.2);
+        border-radius: 8px;
+        background: rgba(17, 21, 24, 0.94);
+        padding: 16px;
+      }
+      header {
+        margin-bottom: 14px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        color: #f3fbf7;
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 0;
+        color: #8fa09a;
+        line-height: 1.6;
+      }
+      video {
+        width: 100%;
+        max-height: 62svh;
+        margin-top: 14px;
+        border-radius: 8px;
+        background: #000;
+        border: 1px solid rgba(168, 212, 93, 0.2);
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      a,
+      button {
+        min-height: 50px;
+        border: 1px solid rgba(168, 212, 93, 0.2);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #f3fbf7;
+        text-decoration: none;
+        display: grid;
+        place-items: center;
+        font: inherit;
+      }
+      .primary {
+        border: 0;
+        background: linear-gradient(135deg, #28c49a, #a8d45d);
+        color: #06120e;
+        font-weight: 800;
+      }
+      .notice {
+        margin-top: 14px;
+        border: 1px solid rgba(255, 196, 87, 0.42);
+        border-radius: 8px;
+        padding: 12px;
+        color: #f1ddaa;
+        background: rgba(255, 196, 87, 0.08);
+      }
+      .hidden {
+        display: none;
+      }
+      @media (max-width: 560px) {
+        body {
+          padding: 10px;
+        }
+        .actions {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>回放中心</h1>
+        <p id="subtitle">手機觀看與下載頁</p>
+      </header>
+      <section>
+        <p id="fileName">讀取影片中...</p>
+        <video id="player" controls playsinline></video>
+        <div class="actions">
+          <a id="download" class="primary" href="#" download>下載影片</a>
+          <button type="button" id="copy">複製影片連結</button>
+        </div>
+        <div id="notice" class="notice hidden"></div>
+      </section>
+    </main>
+    <script>
+      function readHashParams() {
+        const raw = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
+        return new URLSearchParams(raw);
+      }
+
+      function valueFromParams(primary, fallback) {
+        const query = new URLSearchParams(location.search);
+        const hash = readHashParams();
+        return query.get(primary) || hash.get(primary) || query.get(fallback) || hash.get(fallback) || "";
+      }
+
+      const query = new URLSearchParams(location.search);
+      const hash = readHashParams();
+      const video = valueFromParams("video", "v");
+      const name = valueFromParams("name", "n") || "replay-video.mp4";
+      const allowDownload = (query.get("download") || hash.get("download") || "1") !== "0";
+      const demo = (query.get("demo") || hash.get("demo")) === "1";
+      const player = document.getElementById("player");
+      const download = document.getElementById("download");
+      const copy = document.getElementById("copy");
+      const fileName = document.getElementById("fileName");
+      const subtitle = document.getElementById("subtitle");
+      const notice = document.getElementById("notice");
+
+      fileName.textContent = name;
+
+      if (!video) {
+        subtitle.textContent = "影片連結不存在";
+        player.classList.add("hidden");
+        download.classList.add("hidden");
+        copy.classList.add("hidden");
+        notice.classList.remove("hidden");
+        notice.textContent = "此 QR 沒有帶入影片網址，請回到車機重新產生。";
+      } else {
+        player.src = video;
+        download.href = video;
+        download.download = name;
+        if (!allowDownload) download.classList.add("hidden");
+        copy.addEventListener("click", async () => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(video);
+            copy.textContent = "已複製";
+            setTimeout(() => (copy.textContent = "複製影片連結"), 1200);
+          } else {
+            location.href = video;
+          }
+        });
+      }
+
+      if (demo) {
+        notice.classList.remove("hidden");
+        notice.textContent = "目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。";
+      }
+    </script>
+  </body>
+</html>
