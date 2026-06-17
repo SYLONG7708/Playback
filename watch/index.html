@@ -57,7 +57,7 @@
       }
       .actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 10px;
         margin-top: 14px;
       }
@@ -110,8 +110,10 @@
         <p id="fileName">讀取影片中...</p>
         <video id="player" controls playsinline></video>
         <div class="actions">
-          <a id="download" class="primary" href="#" download>下載影片</a>
-          <button type="button" id="copy">複製影片連結</button>
+          <button type="button" id="download" class="primary">下載影片</button>
+          <a id="openDirect" href="#" target="_blank" rel="noopener">開啟原始影片</a>
+          <button type="button" id="share">分享</button>
+          <button type="button" id="copy">複製播放頁</button>
         </div>
         <div id="notice" class="notice hidden"></div>
       </section>
@@ -130,11 +132,19 @@
 
       const player = document.getElementById("player");
       const download = document.getElementById("download");
+      const openDirect = document.getElementById("openDirect");
+      const share = document.getElementById("share");
       const copy = document.getElementById("copy");
       const fileName = document.getElementById("fileName");
       const subtitle = document.getElementById("subtitle");
       const notice = document.getElementById("notice");
       let currentVideo = "";
+      let currentName = "replay-video.mp4";
+
+      function showNotice(message) {
+        notice.classList.remove("hidden");
+        notice.textContent = message;
+      }
 
       function applyVideoFromLocation() {
         const query = new URLSearchParams(location.search);
@@ -145,6 +155,7 @@
         const demo = (query.get("demo") || hash.get("demo")) === "1";
 
         currentVideo = video;
+        currentName = name;
         fileName.textContent = name;
         subtitle.textContent = "手機觀看與下載頁";
         notice.classList.add("hidden");
@@ -156,34 +167,81 @@
           player.load();
           player.classList.add("hidden");
           download.classList.add("hidden");
+          openDirect.classList.add("hidden");
+          share.classList.add("hidden");
           copy.classList.add("hidden");
-          notice.classList.remove("hidden");
-          notice.textContent = "此 QR 沒有帶入影片網址，請回到車機重新產生。";
+          showNotice("此 QR 沒有帶入影片網址，請回到車機重新產生。");
           return;
         }
 
         player.classList.remove("hidden");
         download.classList.toggle("hidden", !allowDownload);
+        openDirect.classList.remove("hidden");
+        share.classList.remove("hidden");
         copy.classList.remove("hidden");
         if (player.src !== video) {
           player.src = video;
           player.load();
         }
-        download.href = video;
-        download.download = name;
+        openDirect.href = video;
 
         if (demo) {
-          notice.classList.remove("hidden");
-          notice.textContent = "目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。";
+          showNotice("目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。");
         }
       }
+
+      download.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        const originalText = download.textContent;
+        download.disabled = true;
+        download.textContent = "準備下載...";
+        try {
+          const response = await fetch(currentVideo, { mode: "cors" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = currentName || "replay-video.mp4";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          showNotice("已送出下載。如在 LINE 內建瀏覽器沒有開始下載，請改點「開啟原始影片」後用瀏覽器選單儲存。");
+        } catch (error) {
+          window.open(currentVideo, "_blank", "noopener");
+          showNotice("此瀏覽器限制直接下載，已開啟原始影片；請用瀏覽器選單儲存影片。");
+        } finally {
+          download.disabled = false;
+          download.textContent = originalText;
+        }
+      });
+
+      share.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        const shareData = {
+          title: "回放中心",
+          text: `${currentName} 觀看與下載連結`,
+          url: location.href
+        };
+        if (navigator.share) {
+          await navigator.share(shareData);
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(location.href);
+          showNotice("此瀏覽器沒有分享視窗，已複製播放頁連結。");
+        } else {
+          location.href = `mailto:?subject=${encodeURIComponent(shareData.title)}&body=${encodeURIComponent(location.href)}`;
+        }
+      });
 
       copy.addEventListener("click", async () => {
         if (!currentVideo) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(currentVideo);
+          await navigator.clipboard.writeText(location.href);
           copy.textContent = "已複製";
-          setTimeout(() => (copy.textContent = "複製影片連結"), 1200);
+          setTimeout(() => (copy.textContent = "複製播放頁"), 1200);
         } else {
           location.href = currentVideo;
         }
