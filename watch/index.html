@@ -128,48 +128,69 @@
         return query.get(primary) || hash.get(primary) || query.get(fallback) || hash.get(fallback) || "";
       }
 
-      const query = new URLSearchParams(location.search);
-      const hash = readHashParams();
-      const video = valueFromParams("video", "v");
-      const name = valueFromParams("name", "n") || "replay-video.mp4";
-      const allowDownload = (query.get("download") || hash.get("download") || "1") !== "0";
-      const demo = (query.get("demo") || hash.get("demo")) === "1";
       const player = document.getElementById("player");
       const download = document.getElementById("download");
       const copy = document.getElementById("copy");
       const fileName = document.getElementById("fileName");
       const subtitle = document.getElementById("subtitle");
       const notice = document.getElementById("notice");
+      let currentVideo = "";
 
-      fileName.textContent = name;
+      function applyVideoFromLocation() {
+        const query = new URLSearchParams(location.search);
+        const hash = readHashParams();
+        const video = valueFromParams("video", "v");
+        const name = valueFromParams("name", "n") || "replay-video.mp4";
+        const allowDownload = (query.get("download") || hash.get("download") || "1") !== "0";
+        const demo = (query.get("demo") || hash.get("demo")) === "1";
 
-      if (!video) {
-        subtitle.textContent = "影片連結不存在";
-        player.classList.add("hidden");
-        download.classList.add("hidden");
-        copy.classList.add("hidden");
-        notice.classList.remove("hidden");
-        notice.textContent = "此 QR 沒有帶入影片網址，請回到車機重新產生。";
-      } else {
-        player.src = video;
+        currentVideo = video;
+        fileName.textContent = name;
+        subtitle.textContent = "手機觀看與下載頁";
+        notice.classList.add("hidden");
+        notice.textContent = "";
+
+        if (!video) {
+          subtitle.textContent = "影片連結不存在";
+          player.removeAttribute("src");
+          player.load();
+          player.classList.add("hidden");
+          download.classList.add("hidden");
+          copy.classList.add("hidden");
+          notice.classList.remove("hidden");
+          notice.textContent = "此 QR 沒有帶入影片網址，請回到車機重新產生。";
+          return;
+        }
+
+        player.classList.remove("hidden");
+        download.classList.toggle("hidden", !allowDownload);
+        copy.classList.remove("hidden");
+        if (player.src !== video) {
+          player.src = video;
+          player.load();
+        }
         download.href = video;
         download.download = name;
-        if (!allowDownload) download.classList.add("hidden");
-        copy.addEventListener("click", async () => {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(video);
-            copy.textContent = "已複製";
-            setTimeout(() => (copy.textContent = "複製影片連結"), 1200);
-          } else {
-            location.href = video;
-          }
-        });
+
+        if (demo) {
+          notice.classList.remove("hidden");
+          notice.textContent = "目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。";
+        }
       }
 
-      if (demo) {
-        notice.classList.remove("hidden");
-        notice.textContent = "目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。";
-      }
+      copy.addEventListener("click", async () => {
+        if (!currentVideo) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(currentVideo);
+          copy.textContent = "已複製";
+          setTimeout(() => (copy.textContent = "複製影片連結"), 1200);
+        } else {
+          location.href = currentVideo;
+        }
+      });
+
+      window.addEventListener("hashchange", applyVideoFromLocation);
+      applyVideoFromLocation();
     </script>
   </body>
 </html>
