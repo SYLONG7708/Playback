@@ -3,6 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <meta http-equiv="Pragma" content="no-cache" />
     <link rel="icon" href="data:," />
     <title>回放中心觀看頁</title>
     <style>
@@ -12,6 +14,9 @@
         background: #02050a;
         color: #dff9ff;
       }
+      * {
+        box-sizing: border-box;
+      }
       body {
         min-height: 100svh;
         margin: 0;
@@ -19,11 +24,11 @@
         background:
           linear-gradient(90deg, rgba(34, 242, 255, 0.08) 1px, transparent 1px),
           linear-gradient(180deg, rgba(168, 85, 247, 0.08) 1px, transparent 1px),
-          linear-gradient(135deg, #02050a 0%, #071a24 50%, #03070d 100%);
+          linear-gradient(135deg, #02050a 0%, #071a24 48%, #03070d 100%);
         background-size: 46px 46px, 46px 46px, auto;
       }
       main {
-        max-width: 860px;
+        max-width: 900px;
         margin: 0 auto;
       }
       header,
@@ -56,9 +61,32 @@
         background: #000;
         border: 1px solid rgba(34, 242, 255, 0.28);
       }
+      .meta {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 12px;
+        border: 1px solid rgba(34, 242, 255, 0.24);
+        border-radius: 8px;
+        background: rgba(3, 7, 18, 0.72);
+      }
+      .meta-row {
+        display: grid;
+        grid-template-columns: 86px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        color: #dff9ff;
+        font-size: 14px;
+      }
+      .meta-row span:first-child {
+        color: #7dd3fc;
+      }
+      .value {
+        overflow-wrap: anywhere;
+      }
       .actions {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 10px;
         margin-top: 14px;
       }
@@ -72,7 +100,9 @@
         text-decoration: none;
         display: grid;
         place-items: center;
+        text-align: center;
         font: inherit;
+        padding: 8px;
       }
       .primary {
         border-color: rgba(168, 85, 247, 0.72);
@@ -88,15 +118,23 @@
         color: #dff9ff;
         background: rgba(34, 242, 255, 0.08);
       }
+      .error {
+        border-color: rgba(248, 113, 113, 0.64);
+        color: #fecaca;
+        background: rgba(127, 29, 29, 0.24);
+      }
       .hidden {
         display: none;
       }
-      @media (max-width: 560px) {
+      @media (max-width: 720px) {
         body {
           padding: 10px;
         }
         .actions {
           grid-template-columns: 1fr;
+        }
+        .meta-row {
+          grid-template-columns: 74px minmax(0, 1fr);
         }
       }
     </style>
@@ -109,12 +147,18 @@
       </header>
       <section>
         <p id="fileName">讀取影片中...</p>
-        <video id="player" controls playsinline crossorigin="anonymous"></video>
+        <video id="player" controls playsinline webkit-playsinline preload="metadata" crossorigin="anonymous"></video>
+        <div class="meta" id="meta">
+          <div class="meta-row"><span>核對碼</span><strong class="value" id="uidText">-</strong></div>
+          <div class="meta-row"><span>檔案大小</span><strong class="value" id="sizeText">-</strong></div>
+          <div class="meta-row"><span>影片來源</span><strong class="value" id="sourceText">-</strong></div>
+        </div>
         <div class="actions">
           <button type="button" id="download" class="primary">下載影片</button>
           <a id="openDirect" href="#" target="_blank" rel="noopener">開啟原始影片</a>
           <button type="button" id="share">分享</button>
-          <button type="button" id="copy">複製播放頁</button>
+          <button type="button" id="lineShare">LINE</button>
+          <button type="button" id="copy">複製連結</button>
         </div>
         <div id="notice" class="notice hidden"></div>
       </section>
@@ -125,70 +169,104 @@
         return new URLSearchParams(raw);
       }
 
-      function valueFromParams(primary, fallback) {
+      function firstValue(...keys) {
         const query = new URLSearchParams(location.search);
         const hash = readHashParams();
-        return query.get(primary) || hash.get(primary) || query.get(fallback) || hash.get(fallback) || "";
+        for (const key of keys) {
+          const value = query.get(key);
+          if (value) return value;
+        }
+        for (const key of keys) {
+          const value = hash.get(key);
+          if (value) return value;
+        }
+        return "";
+      }
+
+      function formatBytes(value) {
+        const bytes = Number(value || 0);
+        if (!Number.isFinite(bytes) || bytes <= 0) return "-";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const size = bytes / Math.pow(1024, index);
+        return `${size >= 10 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`;
+      }
+
+      function isHttpVideoUrl(value) {
+        try {
+          const url = new URL(value);
+          return url.protocol === "https:" || url.protocol === "http:";
+        } catch {
+          return false;
+        }
       }
 
       const player = document.getElementById("player");
       const download = document.getElementById("download");
       const openDirect = document.getElementById("openDirect");
       const share = document.getElementById("share");
+      const lineShare = document.getElementById("lineShare");
       const copy = document.getElementById("copy");
       const fileName = document.getElementById("fileName");
       const subtitle = document.getElementById("subtitle");
       const notice = document.getElementById("notice");
+      const uidText = document.getElementById("uidText");
+      const sizeText = document.getElementById("sizeText");
+      const sourceText = document.getElementById("sourceText");
       let currentVideo = "";
       let currentName = "replay-video.mp4";
 
-      function showNotice(message) {
-        notice.classList.remove("hidden");
+      function showNotice(message, isError = false) {
+        notice.classList.remove("hidden", "error");
+        if (isError) notice.classList.add("error");
         notice.textContent = message;
       }
 
+      function setControlsVisible(visible) {
+        player.classList.toggle("hidden", !visible);
+        download.classList.toggle("hidden", !visible);
+        openDirect.classList.toggle("hidden", !visible);
+        share.classList.toggle("hidden", !visible);
+        lineShare.classList.toggle("hidden", !visible);
+        copy.classList.toggle("hidden", !visible);
+      }
+
+      function forceLoadVideo(video) {
+        player.pause();
+        player.removeAttribute("src");
+        player.load();
+        player.src = video;
+        player.load();
+      }
+
       function applyVideoFromLocation() {
-        const query = new URLSearchParams(location.search);
-        const hash = readHashParams();
-        const video = valueFromParams("video", "v");
-        const name = valueFromParams("name", "n") || "replay-video.mp4";
-        const allowDownload = (query.get("download") || hash.get("download") || "1") !== "0";
-        const demo = (query.get("demo") || hash.get("demo")) === "1";
+        const video = firstValue("v", "video");
+        const name = firstValue("n", "name") || "replay-video.mp4";
+        const uid = firstValue("uid", "id") || "-";
+        const size = firstValue("s", "size");
+        const allowDownload = (firstValue("download") || "1") !== "0";
 
         currentVideo = video;
         currentName = name;
         fileName.textContent = name;
+        uidText.textContent = uid;
+        sizeText.textContent = formatBytes(size);
+        sourceText.textContent = video || "-";
         subtitle.textContent = "手機觀看與下載頁";
         notice.classList.add("hidden");
         notice.textContent = "";
 
-        if (!video) {
+        if (!video || !isHttpVideoUrl(video)) {
           subtitle.textContent = "影片連結不存在";
-          player.removeAttribute("src");
-          player.load();
-          player.classList.add("hidden");
-          download.classList.add("hidden");
-          openDirect.classList.add("hidden");
-          share.classList.add("hidden");
-          copy.classList.add("hidden");
-          showNotice("此 QR 沒有帶入影片網址，請回到車機重新產生。");
+          setControlsVisible(false);
+          showNotice("此 QR 沒有帶入有效影片網址，請回到車機重新上傳並產生新的二維碼。", true);
           return;
         }
 
-        player.classList.remove("hidden");
+        setControlsVisible(true);
         download.classList.toggle("hidden", !allowDownload);
-        openDirect.classList.remove("hidden");
-        share.classList.remove("hidden");
-        copy.classList.remove("hidden");
-        if (player.src !== video) {
-          player.src = video;
-          player.load();
-        }
         openDirect.href = video;
-
-        if (demo) {
-          showNotice("目前為測試 QR。正式一次性使用需由雲端後端控管 token，避免第二次掃碼。");
-        }
+        forceLoadVideo(video);
       }
 
       download.addEventListener("click", async () => {
@@ -197,7 +275,7 @@
         download.disabled = true;
         download.textContent = "準備下載...";
         try {
-          const response = await fetch(currentVideo, { mode: "cors" });
+          const response = await fetch(currentVideo, { mode: "cors", cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
@@ -208,10 +286,10 @@
           link.click();
           link.remove();
           setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-          showNotice("已送出下載。如在 LINE 內建瀏覽器沒有開始下載，請改點「開啟原始影片」後用瀏覽器選單儲存。");
+          showNotice("已送出下載。若 LINE 或 iOS 內建瀏覽器沒有存檔，請點「開啟原始影片」後用瀏覽器分享或儲存。");
         } catch (error) {
           window.open(currentVideo, "_blank", "noopener");
-          showNotice("此瀏覽器限制直接下載，已開啟原始影片；請用瀏覽器選單儲存影片。");
+          showNotice("此瀏覽器限制直接下載，已開啟原始影片；請用瀏覽器選單儲存或分享。");
         } finally {
           download.disabled = false;
           download.textContent = originalText;
@@ -229,26 +307,32 @@
           await navigator.share(shareData);
           return;
         }
+        await copyCurrentUrl("此瀏覽器沒有分享視窗，已複製播放連結。");
+      });
+
+      lineShare.addEventListener("click", () => {
+        if (!currentVideo) return;
+        const text = encodeURIComponent(`${currentName}\n${location.href}`);
+        location.href = `https://line.me/R/msg/text/?${text}`;
+      });
+
+      async function copyCurrentUrl(message) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(location.href);
-          showNotice("此瀏覽器沒有分享視窗，已複製播放頁連結。");
+          showNotice(message || "已複製播放連結。");
         } else {
-          location.href = `mailto:?subject=${encodeURIComponent(shareData.title)}&body=${encodeURIComponent(location.href)}`;
+          window.prompt("請複製播放連結", location.href);
         }
-      });
+      }
 
       copy.addEventListener("click", async () => {
         if (!currentVideo) return;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(location.href);
-          copy.textContent = "已複製";
-          setTimeout(() => (copy.textContent = "複製播放頁"), 1200);
-        } else {
-          location.href = currentVideo;
-        }
+        await copyCurrentUrl("已複製播放連結。");
       });
 
       window.addEventListener("hashchange", applyVideoFromLocation);
+      window.addEventListener("popstate", applyVideoFromLocation);
+      window.addEventListener("pageshow", applyVideoFromLocation);
       applyVideoFromLocation();
     </script>
   </body>
